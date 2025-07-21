@@ -10,13 +10,21 @@ import (
 
 	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	fmt.Printf("")
-	var Token string
-	var err error
-	Token = ""
+	err := godotenv.Load()
+
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	Token := os.Getenv("DISCORD_TOKEN")
+	Prefix := os.Getenv("COMMAND_PREFIX")
+
+	fmt.Printf("Token=%s, Prefix=%s", Token, Prefix)
+
 	session, _ := discordgo.New("Bot " + Token)
 
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
