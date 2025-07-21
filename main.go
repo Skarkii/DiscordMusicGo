@@ -7,8 +7,9 @@ import (
 	"os/signal"
 
 	"io/ioutil"
-	"github.com/bwmarrin/discordgo"
+
 	"github.com/bwmarrin/dgvoice"
+	"github.com/bwmarrin/discordgo"
 )
 
 func main() {
@@ -42,6 +43,10 @@ func main() {
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// Ignore messages sent if they're not sent from the designate bot channel
+	if m.ChannelID != "890646235478904893" {
+		return
+	}
 	// Ignore messages sent by the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
