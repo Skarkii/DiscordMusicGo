@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/signal"
 
+	"io/ioutil"
 	"github.com/bwmarrin/discordgo"
+	"github.com/bwmarrin/dgvoice"
 )
 
 func main() {
@@ -50,9 +52,11 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	var dgv *discordgo.VoiceConnection
+
 	if voiceChannelID != "" {
 		fmt.Printf("User is in channel %s\n", voiceChannelID)
-		_, err := s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
+		dgv, err = s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
 		if err != nil {
 			log.Printf("Error joining voice channel %s: %v", voiceChannelID, err)
 		}
@@ -60,7 +64,15 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		fmt.Printf("User is NOT in channel %s\n", voiceChannelID)
 		var reply string
 		reply = fmt.Sprintf("Hey %s you are not in any channel!", m.Author.DisplayName())
-		s.ChannelMessageSend(m.ChannelID, reply)
+		_ = reply
+		// s.ChannelMessageSend(m.ChannelID, reply)
+	}
+
+	files, _ := ioutil.ReadDir("songs")
+
+	for _, f := range files {
+		fmt.Println("PlayAudioFile:", f.Name())
+		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", "songs", f.Name()), make(chan bool))
 	}
 }
 
@@ -73,8 +85,7 @@ func getUserVoiceChannel(s *discordgo.Session, guildID, userID string) (string, 
 		}
 	}
 
-	for i, vs := range guild.VoiceStates {
-		fmt.Printf("%d", i)
+	for _, vs := range guild.VoiceStates {
 		if vs.UserID == userID {
 			return vs.ChannelID, nil
 		}
