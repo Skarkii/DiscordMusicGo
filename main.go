@@ -1,14 +1,15 @@
 package main
 
 import (
+	"main/dgvoice"
+	"main/ytdlp"
+
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 
-	"io/ioutil"
-
-	"github.com/bwmarrin/dgvoice"
 	"github.com/bwmarrin/discordgo"
 	"github.com/joho/godotenv"
 )
@@ -21,9 +22,7 @@ func main() {
 	}
 
 	Token := os.Getenv("DISCORD_TOKEN")
-	Prefix := os.Getenv("COMMAND_PREFIX")
-
-	fmt.Printf("Token=%s, Prefix=%s", Token, Prefix)
+	//Prefix := os.Getenv("COMMAND_PREFIX")
 
 	session, _ := discordgo.New("Bot " + Token)
 
@@ -81,11 +80,13 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		// s.ChannelMessageSend(m.ChannelID, reply)
 	}
 
-	files, _ := ioutil.ReadDir("songs")
+	Prefix := "!p"
 
-	for _, f := range files {
-		fmt.Println("PlayAudioFile:", f.Name())
-		dgvoice.PlayAudioFile(dgv, fmt.Sprintf("%s/%s", "songs", f.Name()), make(chan bool))
+	print(m.Message.Content)
+
+	if strings.HasPrefix(m.Message.Content, Prefix) {
+		fisk := ytdlp.GetYTDLPCommand(strings.TrimPrefix(m.Message.Content, Prefix))
+		dgvoice.PlayAudioFile(dgv, fisk.Stdout, make(chan bool))
 	}
 }
 
