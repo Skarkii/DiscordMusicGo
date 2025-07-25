@@ -2,6 +2,14 @@
 A music bot for Discord Written in Golang.
 
 # Prerequties
-You need to have the following:
-1. ffmpeg
-2. Opus
+This bot requires multiple packages to function:
+- Golang
+- ffmpeg
+- OpusTools
+- ytdlp
+
+# Setup
+1. Copy .env.example to .env
+2. Fill .env with the required info
+3. Run the bot by running ``go run .``
+4. (optional) Build the Bot by running ``go build``, then run the generated executable
