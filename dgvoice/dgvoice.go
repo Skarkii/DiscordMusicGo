@@ -1,4 +1,12 @@
 /*******************************************************************************
+  * This is a modified version of bmwarrin's package dgvoice
+  * Check it out below:
+  * https://github.com/bwmarrin/dgvoice
+  *
+  */
+
+
+/*******************************************************************************
  * This is very experimental code and probably a long way from perfect or
  * ideal.  Please provide feed back on areas that would improve performance
  *
@@ -11,7 +19,7 @@ package dgvoice
 import (
 	"bufio"
 	"encoding/binary"
-	"fmt"
+	// "fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -94,48 +102,50 @@ func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
 	}
 }
 
+// We should not need this function?
+
 // ReceivePCM will receive on the the Discordgo OpusRecv channel and decode
 // the opus audio into PCM then send it on the provided channel.
-func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
-	if c == nil {
-		return
-	}
-
-	var err error
-
-	for {
-		if v.Ready == false || v.OpusRecv == nil {
-			OnError(fmt.Sprintf("Discordgo not to receive opus packets. %+v : %+v", v.Ready, v.OpusSend), nil)
-			return
-		}
-
-		p, ok := <-v.OpusRecv
-		if !ok {
-			return
-		}
-
-		if speakers == nil {
-			speakers = make(map[uint32]*gopus.Decoder)
-		}
-
-		_, ok = speakers[p.SSRC]
-		if !ok {
-			speakers[p.SSRC], err = gopus.NewDecoder(48000, 2)
-			if err != nil {
-				OnError("error creating opus decoder", err)
-				continue
-			}
-		}
-
-		p.PCM, err = speakers[p.SSRC].Decode(p.Opus, 960, false)
-		if err != nil {
-			OnError("Error decoding opus data", err)
-			continue
-		}
-
-		c <- p
-	}
-}
+// func ReceivePCM(v *discordgo.VoiceConnection, c chan *discordgo.Packet) {
+// 	if c == nil {
+// 		return
+// 	}
+//
+// 	var err error
+//
+// 	for {
+// 		if v.Ready == false || v.OpusRecv == nil {
+// 			OnError(fmt.Sprintf("Discordgo not to receive opus packets. %+v : %+v", v.Ready, v.OpusSend), nil)
+// 			return
+// 		}
+//
+// 		p, ok := <-v.OpusRecv
+// 		if !ok {
+// 			return
+// 		}
+//
+// 		if speakers == nil {
+// 			speakers = make(map[uint32]*gopus.Decoder)
+// 		}
+//
+// 		_, ok = speakers[p.SSRC]
+// 		if !ok {
+// 			speakers[p.SSRC], err = gopus.NewDecoder(48000, 2)
+// 			if err != nil {
+// 				OnError("error creating opus decoder", err)
+// 				continue
+// 			}
+// 		}
+//
+// 		p.PCM, err = speakers[p.SSRC].Decode(p.Opus, 960, false)
+// 		if err != nil {
+// 			OnError("Error decoding opus data", err)
+// 			continue
+// 		}
+//
+// 		c <- p
+// 	}
+// }
 
 func PlayAudioFile(v *discordgo.VoiceConnection, url string, stop <-chan bool) {
 
