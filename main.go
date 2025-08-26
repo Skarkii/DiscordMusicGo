@@ -24,17 +24,18 @@ func main() {
 	intents := discordapi.IntentGuildMessages | discordapi.IntentDirectMessages | discordapi.IntentGuildVoiceStates | discordapi.IntentGuilds | discordapi.IntentMessageContent
 
 	s, err := discordapi.New(Token, intents)
-
 	if err != nil {
 		log.Fatal("Error creating Discord session")
 	}
 
 	go func() {
-		var payload discordapi.GatewayPayload
 		for {
+			var payload discordapi.GatewayPayload
 			if err := s.GetPayload(&payload); err != nil {
 				fmt.Println("Error reading from Discord")
 			}
+
+			//fmt.Printf("Received payload: %v\n", payload)
 
 			if payload.Type == "MESSAGE_CREATE" {
 				var msg discordapi.MessageCreate
@@ -43,16 +44,29 @@ func main() {
 					fmt.Printf("Error unmarshaling message: %v\n", err)
 					continue
 				}
-				fmt.Printf("AUTHOR: %s MSG: %s\n", msg.Author.ID, msg.Content)
+				if msg.Author.ID == s.Bot.ID {
+					continue
+				}
+
+				fmt.Printf("AUTHOR: %s MSG: %s\n", msg.Author.Name, msg.Content)
+
+				if msg.Content == "-ping" {
+					err := s.SendMessage(msg.ChannelID, "Pong!")
+					if err != nil {
+						fmt.Printf("Error sending message: %v\n", err)
+					}
+				}
 			}
 
 		}
 	}()
 
-	fmt.Println("Bot is running! Press Ctrl+C to exit.")
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-	<-sc
+	if s.Bot.Name != "" {
+		fmt.Printf("Bot \"%s\", is now running! Press Ctrl+C to exit.\n", s.Bot.Name)
+		sc := make(chan os.Signal, 1)
+		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+		<-sc
+	}
 
 	err = s.Exit()
 	if err != nil {

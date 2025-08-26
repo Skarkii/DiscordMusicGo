@@ -3,3 +3,4 @@ build
 build/**
 main
 .idea
+message.example

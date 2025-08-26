@@ -4,44 +4,28 @@ Custom Discord API using websockets. Main focus here is parallel voice channel c
 package discordapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
 type Session struct {
-	Token   string
-	conn    *websocket.Conn
-	intents int
+	Token      string
+	conn       *websocket.Conn
+	intents    int
+	Bot        bot
+	httpClient *http.Client
 }
 
-//func httpRequest() {
-//	req, err := http.NewRequest("GET", "https://discord.com/api/v10/users/@me", nil)
-//	req.Header.Set("Authorization", "Bot "+token)
-//	req.Header.Set("Content-Type", "application/json")
-//	if err != nil {
-//		log.Fatalf("Could not send request")
-//	}
-//	client := &http.Client{}
-//	resp, err := client.Do(req)
-//	if err != nil {
-//		log.Fatalf("Could not send request")
-//		return s, nil
-//	}
-//	defer resp.Body.Close()
-//
-//	body, err := io.ReadAll(resp.Body)
-//	if err != nil {
-//		log.Fatalf("Could not send request")
-//	}
-//
-//	fmt.Printf("Response from Discord: %s\n", string(body))
-//}
-
 const (
+	// https://discord-intents-calculator.vercel.app/
 	IntentGuilds                      = 1 << 0
 	IntentGuildMembers                = 1 << 1
 	IntentGuildModeration             = 1 << 2
@@ -67,31 +51,46 @@ const (
 
 const (
 	// https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
-	OpDispatch           = 0    //	Receive	An event was dispatched.
-	OpHeartbeat          = 1    //	Send/Receive	Fired periodically by the client to keep the connection alive.
-	OpIdentify           = 2    //	Send	Starts a new session during the initial handshake.
-	OpPresence           = 3    //	Update	Send	Update the client's presence.
-	OpVoice              = 4    //	State Update	Send	Used to join/leave or move between voice channels.
-	OpResume             = 6    //	Send	Resume a previous session that was disconnected.
-	OpReconnect          = 7    //	Receive	You should attempt to reconnect and resume immediately.
-	OpRequest            = 8    //	Guild Members	Send	Request information about offline guild members in a large guild.
-	OpInvalid            = 9    //	Session	Receive	The session has been invalidated. You should reconnect and identify/resume accordingly.
-	OpHello              = 10   //	Receive	Sent immediately after connecting, contains the heartbeat_interval to use.
-	OpHeartbeatAck       = 11   //	ACK	Receive	Sent in response to receiving a heartbeat to acknowledge that it has been received.
-	OpRequestSoundboards = 31   //	Soundboard Sounds	Send	Request information about soundboard sounds in a set of guilds.
-	OpClose              = 1000 //  Closes the connection
+	OpDispatch                = 0    // receive - An event was dispatched.
+	OpHeartbeat               = 1    // send/receive - Fired periodically by the client to keep the connection alive.
+	OpIdentify                = 2    // send - Starts a new session during the initial handshake.
+	OpPresenceUpdate          = 3    // send - Update the client's presence.
+	OpVoiceStateUpdate        = 4    // send - Used to join/leave or move between voice channels.
+	OpResume                  = 6    // send - Resume a previous session that was disconnected.
+	OpReconnect               = 7    // receive - You should attempt to reconnect and resume immediately.
+	OpRequestGuildMembers     = 8    // send - Request information about offline guild members in a large guild.
+	OpInvalidSession          = 9    // receive - The session has been invalidated. You should reconnect and identify/resume accordingly.
+	OpHello                   = 10   // receive - Sent immediately after connecting, contains the heartbeat_interval to use.
+	OpHeartbeatACK            = 11   // receive - Sent in response to receiving a heartbeat to acknowledge that it has been received.
+	OpRequestSoundboardSounds = 31   // send - Request information about soundboard sounds in a set of guilds.
+	OpClose                   = 1000 // send - Send the connection
 )
 
 const (
 	gateway = "wss://gateway.discord.gg/?v=10&encoding=json"
+	apiBase = "https://discord.com/api/v10"
 )
 
 type MessageCreate struct {
 	Content string `json:"content"`
 	Author  struct {
-		ID string `json:"id"`
+		ID   string `json:"id"`
+		Name string `json:"username"`
 	} `json:"author"`
 	ChannelID string `json:"channel_id"`
+	GuildID   string `json:"guild_id"`
+}
+
+type bot struct {
+	ID   string `json:"id"`
+	Name string `json:"username"`
+}
+
+type ReadyCreate struct {
+	User struct {
+		ID   string `json:"id"`
+		Name string `json:"username"`
+	} `json:"user"`
 }
 
 type GatewayPayload struct {
@@ -126,7 +125,7 @@ func (s Session) Exit() error {
 }
 
 func (s Session) disconnect() error {
-	// Identifies and connects the bot
+	// Closes the connection server side
 	disc := GatewayPayload{
 		Op:   OpClose,
 		Data: nil,
@@ -141,7 +140,7 @@ func (s Session) GetPayload(d *GatewayPayload) error {
 	return s.conn.ReadJSON(&d)
 }
 
-func New(token string, intents int) (Session, error) {
+func New(token string, intents int) (*Session, error) {
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.Dial(gateway, nil)
 
@@ -149,18 +148,12 @@ func New(token string, intents int) (Session, error) {
 		log.Fatalf("Failed to establish connection to Discord: %v", err)
 	}
 
-	s := Session{
-		token,
-		conn,
-		intents,
-	}
-	fmt.Println("Intents: ", s.intents)
 	// Identifies and connects the bot
 	identify := GatewayPayload{
 		Op: OpIdentify,
 		Data: Identify{
 			Token:   token,
-			Intents: s.intents,
+			Intents: intents,
 			Properties: IdentifyProperties{
 				OS:      "Windows 11",
 				Browser: "DiscordMusicGo",
@@ -172,22 +165,42 @@ func New(token string, intents int) (Session, error) {
 		log.Printf("Error sending IDENTIFY: %v\n", err)
 	}
 
-	var heartbeatInterval int
 	var payload GatewayPayload
 	if err := conn.ReadJSON(&payload); err != nil {
-		return s, err
+		return nil, err
 	}
 
 	if payload.Op != OpHello {
-		return s, errors.New("Invalid starting operator retrieved!")
+		return nil, errors.New("Invalid starting operator retrieved!")
 	}
-
-	fmt.Printf("Retrieved Ack from Identify, starting heartbeat\n")
 	data := payload.Data.(map[string]interface{})
-	heartbeatInterval = int(data["heartbeat_interval"].(float64))
-	go startHeartbeat(conn, heartbeatInterval)
+	heartbeatInterval := int(data["heartbeat_interval"].(float64))
 
-	return s, nil
+	for {
+		if err := conn.ReadJSON(&payload); err != nil {
+			return nil, err
+		}
+		if payload.Type == "READY" {
+			break
+		}
+	}
+	// This section needs reformatting to prevent duplicate usage of "data"
+	var msg ReadyCreate
+	adata, _ := json.Marshal(payload.Data)
+	if err := json.Unmarshal(adata, &msg); err != nil {
+		log.Printf("Error unmarshaling message: %v\n", err)
+	}
+	s := Session{
+		token,
+		conn,
+		intents,
+		bot{ID: msg.User.ID, Name: msg.User.Name},
+		&http.Client{},
+	}
+	//fmt.Printf("Retrieved Ack from Identify, starting heartbeat\n")
+	go startHeartbeat(s.conn, heartbeatInterval)
+
+	return &s, nil
 }
 
 func startHeartbeat(conn *websocket.Conn, interval int) {
@@ -200,4 +213,57 @@ func startHeartbeat(conn *websocket.Conn, interval int) {
 			return
 		}
 	}
+}
+
+type SendMessage struct {
+	Content string `json:"content"`
+}
+
+func (s Session) SendMessage(channelID string, content string) error {
+	fmt.Printf("Sending \"%s\"to channel %s\n", content, channelID)
+	url := fmt.Sprintf("%s/channels/%s/messages", apiBase, channelID)
+	msg := SendMessage{Content: content}
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("error marshaling message: %v", err)
+	}
+	return s.httpRequestNoResponse("POST", url, body)
+}
+
+func (s Session) httpRequestAndResponse(method string, url string, body []byte) (string, error) {
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bot "+s.Token)
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	recvBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(recvBody), nil
+}
+
+func (s Session) httpRequestNoResponse(method string, url string, body []byte) error {
+	req, err := http.NewRequest(method, url, bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bot "+s.Token)
+	req.Header.Set("Content-Type", "application/json")
+	if err != nil {
+		return err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
