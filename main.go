@@ -2,7 +2,6 @@ package main
 
 import (
 	"DiscordMusicGo/discordapi"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -30,20 +29,13 @@ func main() {
 
 	go func() {
 		for {
-			var payload discordapi.GatewayPayload
-			if err := s.GetPayload(&payload); err != nil {
+			msgtype, msg, err := s.GetMessage()
+			if err != nil {
 				fmt.Println("Error reading from Discord")
+				continue
 			}
 
-			//fmt.Printf("Received payload: %v\n", payload)
-
-			if payload.Type == "MESSAGE_CREATE" {
-				var msg discordapi.MessageCreate
-				data, _ := json.Marshal(payload.Data)
-				if err := json.Unmarshal(data, &msg); err != nil {
-					fmt.Printf("Error unmarshaling message: %v\n", err)
-					continue
-				}
+			if msgtype == "MESSAGE_CREATE" {
 				if msg.Author.ID == s.Bot.ID {
 					continue
 				}
@@ -61,12 +53,10 @@ func main() {
 		}
 	}()
 
-	if s.Bot.Name != "" {
-		fmt.Printf("Bot \"%s\", is now running! Press Ctrl+C to exit.\n", s.Bot.Name)
-		sc := make(chan os.Signal, 1)
-		signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
-		<-sc
-	}
+	fmt.Printf("Bot \"%s\", is now running! Press Ctrl+C to exit.\n", s.Bot.Name)
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
+	<-sc
 
 	err = s.Exit()
 	if err != nil {

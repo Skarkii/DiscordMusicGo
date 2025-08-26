@@ -140,6 +140,21 @@ func (s Session) GetPayload(d *GatewayPayload) error {
 	return s.conn.ReadJSON(&d)
 }
 
+func (s Session) GetMessage() (string, MessageCreate, error) {
+	var msg MessageCreate
+	var payload GatewayPayload
+	if err := s.GetPayload(&payload); err != nil {
+		return "", msg, err
+	}
+	if payload.Type == "MESSAGE_CREATE" {
+		data, _ := json.Marshal(payload.Data)
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", msg, err
+		}
+	}
+	return payload.Type, msg, nil
+}
+
 func New(token string, intents int) (*Session, error) {
 	dialer := websocket.DefaultDialer
 	conn, _, err := dialer.Dial(gateway, nil)
