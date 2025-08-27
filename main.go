@@ -1,7 +1,6 @@
 package main
 
 import (
-	"DiscordMusicGo/discordapi"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/skarkii/discordgowrap"
 )
 
 func main() {
@@ -20,9 +20,9 @@ func main() {
 	}
 
 	Token := os.Getenv("DISCORD_TOKEN")
-	intents := discordapi.IntentGuildMessages | discordapi.IntentDirectMessages | discordapi.IntentGuildVoiceStates | discordapi.IntentGuilds | discordapi.IntentMessageContent
+	intents := discordgowrap.IntentGuildMessages | discordgowrap.IntentDirectMessages | discordgowrap.IntentGuildVoiceStates | discordgowrap.IntentGuilds | discordgowrap.IntentMessageContent
 
-	s, err := discordapi.New(Token, intents)
+	s, err := discordgowrap.New(Token, intents)
 	if err != nil {
 		log.Fatal("Error creating Discord session")
 	}
