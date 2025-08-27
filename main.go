@@ -31,9 +31,11 @@ func main() {
 		for {
 			msgtype, msg, err := s.GetMessage()
 			if err != nil {
-				fmt.Println("Error reading from Discord")
+				fmt.Println("Error reading from Discord", err)
 				continue
 			}
+
+			//fmt.Printf("msgtype: %s, msg: %s\n", msgtype, msg)
 
 			if msgtype == "MESSAGE_CREATE" {
 				if msg.Author.ID == s.Bot.ID {
@@ -47,6 +49,10 @@ func main() {
 					if err != nil {
 						fmt.Printf("Error sending message: %v\n", err)
 					}
+				}
+				if msg.Content == "-play" {
+
+					s.ConnectToVoice(msg.GuildID, msg.Author.ID)
 				}
 			}
 

@@ -113,15 +113,8 @@ type IdentifyProperties struct {
 }
 
 func (s Session) Exit() error {
-	err := s.disconnect()
-	if err != nil {
-		log.Printf("Could not disconnect!: %v", err)
-	}
-	err = s.conn.Close()
-	if err != nil {
-		return err
-	}
-	return nil
+	// Keep this for now if more things are needed to close.
+	return s.disconnect()
 }
 
 func (s Session) disconnect() error {
@@ -130,10 +123,7 @@ func (s Session) disconnect() error {
 		Op:   OpClose,
 		Data: nil,
 	}
-	if err := s.conn.WriteJSON(disc); err != nil {
-		return err
-	}
-	return nil
+	return s.conn.WriteJSON(disc)
 }
 
 func (s Session) GetMessage() (string, MessageCreate, error) {
@@ -277,4 +267,52 @@ func (s Session) httpRequestNoResponse(method string, url string, body []byte) e
 	}
 	defer resp.Body.Close()
 	return nil
+}
+
+func (s Session) findUserChannelIdInGuild(guildId string, userId string) string {
+	type voiceState struct {
+		ChannelID string `json:"channel_id"`
+	}
+
+	url := fmt.Sprintf("%s/guilds/%s/voice-states/%s", apiBase, guildId, userId)
+
+	respBody, err := s.httpRequestAndResponse("GET", url, nil)
+	if err != nil {
+		log.Printf("findUserChannelIdInGuild: request error: %v\n", err)
+		return ""
+	}
+	fmt.Println(respBody)
+
+	var vs voiceState
+	if err := json.Unmarshal([]byte(respBody), &vs); err != nil {
+		log.Printf("findUserChannelIdInGuild: unmarshal error: %v\nBody: %s\n", err, respBody)
+		return ""
+	}
+
+	return vs.ChannelID
+}
+
+// https://discord.com/developers/docs/topics/voice-connections#retrieving-voice-server-information
+func (s Session) ConnectToVoice(guildId string, userId string) {
+	channelId := s.findUserChannelIdInGuild(guildId, userId)
+
+	if channelId == "" {
+		log.Printf("Failed to find channelID\n")
+		return
+	}
+
+	payload := GatewayPayload{
+		Op: OpVoiceStateUpdate,
+		Data: map[string]interface{}{
+			"guild_id":   guildId,
+			"channel_id": channelId,
+			"self_mute":  false,
+			"self_deaf":  true,
+		},
+	}
+
+	if err := s.conn.WriteJSON(payload); err != nil {
+		log.Printf("Error sending VOICE_STATE_UPDATE: %v\n", err)
+	}
+
 }
