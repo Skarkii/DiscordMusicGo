@@ -136,14 +136,10 @@ func (s Session) disconnect() error {
 	return nil
 }
 
-func (s Session) GetPayload(d *GatewayPayload) error {
-	return s.conn.ReadJSON(&d)
-}
-
 func (s Session) GetMessage() (string, MessageCreate, error) {
 	var msg MessageCreate
 	var payload GatewayPayload
-	if err := s.GetPayload(&payload); err != nil {
+	if err := s.conn.ReadJSON(&payload); err != nil {
 		return "", msg, err
 	}
 	if payload.Type == "MESSAGE_CREATE" {
